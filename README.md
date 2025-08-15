@@ -1,4 +1,4 @@
-You can join our discord community or send feedback at: **[Discord Community](https://discord.gg/RTUTePmQt4)**
+You can join our discord community, send feedback or request for custom solutions at: **[Discord](https://discord.gg/RTUTePmQt4)**
 
 ---
 
