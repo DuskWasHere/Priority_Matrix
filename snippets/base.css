@@ -1,0 +1,29 @@
+
+/* THIS IS FOR HIDING INLINE TITLES */
+.no-inline .inline-title {
+    display: none;
+}
+
+
+
+/* THIS IS FOR HIDING PROPERTIES */
+.hide-properties_reading {
+    --metadata-display-reading: none;
+}
+.hide-properties_editing {
+    --metadata-display-editing: none;
+}
+
+
+
+/* THIS IS FOR WIDENING THE NOTE */
+/* IMPORTANT NOTE: If you are using minimal theme, the commands are `wide` and `max` */
+/* More on minimal theme: https://minimal.guide/features/block-width */
+.wide-view {
+    --file-line-width: 1000px;
+}
+
+.full-view {
+    --file-line-width: 100%;
+}
+
