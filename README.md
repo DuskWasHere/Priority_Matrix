@@ -1,5 +1,6 @@
 Feel free to join our discord community: **[Discord](https://discord.gg/RTUTePmQt4)**
-We build all sorts of stuff here, collaborate and share ideas!
+
+We build workflows, collaborate and share ideas!
 
 
 ---
