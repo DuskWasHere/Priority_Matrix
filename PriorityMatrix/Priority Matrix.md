@@ -9,6 +9,16 @@ cssclasses:
 function PriorityMatrixMain() {
   const { useState, useEffect, useMemo } = dc;
   
+  // Main folder path for Priority Matrix components
+  const [mainFolderPath, setMainFolderPath] = useState("PriorityMatrix");
+  const [hasCheckedFolders, setHasCheckedFolders] = useState(false);
+  const [componentsFound, setComponentsFound] = useState(false);
+  const [dataFolderReady, setDataFolderReady] = useState(false);
+  const [isSetupComplete, setIsSetupComplete] = useState(false);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
+  
   // Application state
   const [systemState, setSystemState] = useState({
     loading: true,
@@ -29,344 +39,329 @@ function PriorityMatrixMain() {
   // Error boundary state
   const [criticalError, setCriticalError] = useState(null);
   
-  // Initialize the system
-  useEffect(() => {
-    let mounted = true;
-    
-    async function initializeSystem() {
-      try {
-        console.log('[PriorityMatrix] Starting system initialization...');
-        setSystemState(prev => ({ ...prev, loading: true, error: null }));
-        
-        // Auto-detect current file location
-        const currentFile = dc.currentFile();
-        const currentFolder = currentFile?.path ? currentFile.path.split('/').slice(0, -1).join('/') : "";
-        
-        // Primary path: same folder as this markdown file
-        let detectedBasePath = currentFolder ? `${currentFolder}/` : "PriorityMatrix/";
-        let componentPath = `${detectedBasePath}PriorityMatrix.jsx`;
-        
-        // Check if component exists at primary location
-        let componentFile = app.vault.getAbstractFileByPath(componentPath);
-        
-        // Fallback paths to try
-        const fallbackPaths = [
-            "PriorityMatrix/PriorityMatrix.jsx",
-            "Work/EisenhowerMatrix.jsx", // Legacy support
-            "PriorityMatrix.jsx",
-            "EisenhowerMatrix.jsx"
-        ];
-        
-        // If primary path doesn't work, try fallbacks
-        if (!componentFile) {
-            for (const fallbackPath of fallbackPaths) {
-                componentFile = app.vault.getAbstractFileByPath(fallbackPath);
-                if (componentFile) {
-                    componentPath = fallbackPath;
-                    // Extract base path for data file location
-                    const pathParts = fallbackPath.split('/');
-                    detectedBasePath = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') + '/' : '';
-                    break;
-                }
-            }
-        }
-        
-        // If still not found, prompt user for path
-        if (!componentFile) {
-            const userPath = await new Promise((resolve) => {
-                const modal = new obsidian.Modal(app);
-                modal.titleEl.setText("Priority Matrix Component Not Found");
-                
-                const content = modal.contentEl;
-                content.createEl("p", { 
-                    text: "The Priority Matrix component could not be found. Please specify the path to PriorityMatrix.jsx:" 
-                });
-                
-                const input = content.createEl("input", {
-                    type: "text",
-                    placeholder: "e.g., PriorityMatrix/PriorityMatrix.jsx"
-                });
-                input.style.width = "100%";
-                input.style.marginBottom = "10px";
-                
-                const buttonContainer = content.createEl("div");
-                buttonContainer.style.textAlign = "right";
-                
-                const confirmBtn = buttonContainer.createEl("button", { text: "Load Component" });
-                confirmBtn.onclick = () => {
-                    modal.close();
-                    resolve(input.value.trim());
-                };
-                
-                const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
-                cancelBtn.style.marginLeft = "10px";
-                cancelBtn.onclick = () => {
-                    modal.close();
-                    resolve(null);
-                };
-                
-                modal.open();
-                input.focus();
-            });
-            
-            if (!userPath) {
-                throw new Error("Priority Matrix component loading cancelled.");
-            }
-            
-            componentPath = userPath;
-            componentFile = app.vault.getAbstractFileByPath(componentPath);
-            
-            if (!componentFile) {
-                throw new Error(`Component not found at: ${componentPath}`);
-            }
-            
-            // Extract base path from user-provided path
-            const pathParts = componentPath.split('/');
-            detectedBasePath = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') + '/' : '';
-        }
-        
-        // Check if PriorityMatrix is available
-        if (window.PriorityMatrix) {
-          console.log('[PriorityMatrix] Clearing existing component...');
-          delete window.PriorityMatrix;
-        }
-        
-        // Load the component using dc.require
-        console.log('[PriorityMatrix] Loading component from:', componentPath);
-        await dc.require(componentPath);
-        
-        // Verify component loaded
-        if (!window.PriorityMatrix && !window.EisenhowerMatrix) {
-          throw new Error('Failed to load PriorityMatrix component');
-        }
-        
-        // Handle legacy component support
-        if (!window.PriorityMatrix && window.EisenhowerMatrix) {
-          window.PriorityMatrix = window.EisenhowerMatrix;
-          console.log('[PriorityMatrix] Using legacy EisenhowerMatrix component');
-        }
-        
-        console.log('[PriorityMatrix] Component loaded successfully');
-        
-        // Update config with detected paths
-        setConfig(prev => ({
-          ...prev,
-          basePath: detectedBasePath,
-          componentPath: componentPath
-        }));
-        
-        if (mounted) {
-          setSystemState({
-            loading: false,
-            error: null,
-            initialized: true,
-            version: "1.0.0"
-          });
-          console.log('[PriorityMatrix] ✓ System initialization complete');
-        }
-        
-      } catch (error) {
-        console.error('[PriorityMatrix] System initialization failed:', error);
-        
-        if (mounted) {
-          setSystemState({
-            loading: false,
-            error: error.message,
-            initialized: false,
-            version: "1.0.0"
-          });
-        }
-      }
+  // Create expected paths based on main folder
+  const getComponentPath = () => `${mainFolderPath}/PriorityMatrix.jsx`;
+  const getDataPath = () => `${mainFolderPath}/priority_matrix_data.json`;
+  
+  // Check if a specific file exists
+  async function fileExists(path) {
+    try {
+      const file = app.vault.getAbstractFileByPath(path);
+      return file !== null && !file.children; // True if file exists and isn't a directory
+    } catch (error) {
+      return false;
     }
-    
-    // Start initialization with error boundary
-    initializeSystem().catch(error => {
-      console.error('[PriorityMatrix] Critical initialization error:', error);
-      if (mounted) {
-        setCriticalError(error.message);
-      }
-    });
-    
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  }
+  
+  // Check if a folder exists
+  async function folderExists(path) {
+    try {
+      const folder = app.vault.getAbstractFileByPath(path);
+      return folder !== null && folder.children !== undefined; // True if folder exists
+    } catch (error) {
+      return false;
+    }
+  }
 
-  // Memoized render component
-  const renderContent = useMemo(() => {
-    // Critical error state
-    if (criticalError) {
-      return (
-        <div style={styles.errorContainer}>
-          <div style={styles.errorIcon}>⚠️</div>
-          <div style={styles.errorTitle}>Critical System Error</div>
-          <div style={styles.errorMessage}>{criticalError}</div>
-          <div style={styles.errorActions}>
-            <button 
-              style={styles.reloadButton}
-              onClick={() => window.location.reload()}
-            >
-              Reload Application
-            </button>
-          </div>
-        </div>
-      );
+  // Initialize the Priority Matrix system
+  async function initializeSystem(path) {
+    try {
+      setIsLoading(true);
+
+      // Clear existing component if present
+      if (window.PriorityMatrix) {
+        delete window.PriorityMatrix;
+      }
+      
+      // Set the global data path BEFORE loading the component
+      window.PriorityMatrixDataPath = `${path}/priority_matrix_data.json`;
+      
+      // Load the component
+      const componentPath = getComponentPath();
+      await dc.require(componentPath);
+      
+      if (!window.PriorityMatrix && !window.EisenhowerMatrix) {
+        throw new Error("Component not loaded properly");
+      }
+
+      // Handle legacy component support
+      if (!window.PriorityMatrix && window.EisenhowerMatrix) {
+        window.PriorityMatrix = window.EisenhowerMatrix;
+      }
+      
+      setIsInitialized(true);
+      setError("");
+      return true;
+    } catch (err) {
+      setError(`Failed to initialize: ${err.message}`);
+      setIsInitialized(false);
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Loading state
-    if (systemState.loading) {
-      return (
-        <div style={styles.loadingContainer}>
-          <div style={styles.loadingSpinner}>⚡</div>
-          <div style={styles.loadingTitle}>Initializing Priority Matrix</div>
-          <div style={styles.loadingMessage}>Loading system components...</div>
-        </div>
-      );
-    }
-    
-    // Initialization error state
-    if (systemState.error) {
-      return (
-        <div style={styles.errorContainer}>
-          <div style={styles.errorIcon}>🔥</div>
-          <div style={styles.errorTitle}>Initialization Error</div>
-          <div style={styles.errorMessage}>{systemState.error}</div>
-          <div style={styles.errorActions}>
-            <button 
-              style={styles.reloadButton}
-              onClick={() => window.location.reload()}
-            >
-              Retry Initialization
-            </button>
-          </div>
-        </div>
-      );
-    }
-    
-    // System ready - render main application
-    if (systemState.initialized && window.PriorityMatrix) {
+  }
+
+  // Check if files exist when component mounts or mainFolderPath changes
+  useEffect(() => {
+    async function checkComponentsAndDataFolder() {
       try {
-        const PriorityMatrixComponent = window.PriorityMatrix;
-        return <PriorityMatrixComponent />;
-      } catch (renderError) {
-        console.error('[PriorityMatrix] Render Error:', renderError);
-        return (
-          <div style={styles.errorContainer}>
-            <div style={styles.errorIcon}>🚨</div>
-            <div style={styles.errorTitle}>Render Error</div>
-            <div style={styles.errorMessage}>
-              Failed to render application: {renderError.message}
-            </div>
-            <div style={styles.errorActions}>
-              <button 
-                style={styles.reloadButton}
-                onClick={() => window.location.reload()}
-              >
-                Reload Application
-              </button>
-            </div>
-          </div>
-        );
+        // Skip checking if already initialized
+        if (isInitialized) return;
+        
+        setIsLoading(true);
+        
+        // Check for the main component
+        const componentPath = getComponentPath();
+        const hasComponent = await fileExists(componentPath);
+        
+        // Update state
+        setComponentsFound(hasComponent);
+        setDataFolderReady(true); // Data is optional for Priority Matrix
+        setHasCheckedFolders(true);
+        setError("");
+
+        // If component is found, initialize the system
+        if (hasComponent) {
+          await initializeSystem(mainFolderPath);
+        }
+      } catch (error) {
+        setError(`Error checking folders: ${error.message}`);
+      } finally {
+        setIsLoading(false);
       }
     }
     
-    // Fallback state
+    // Only check folders if we have a main folder path
+    if (mainFolderPath) {
+      checkComponentsAndDataFolder();
+    } else {
+      setHasCheckedFolders(true);
+      setIsLoading(false);
+    }
+  }, [mainFolderPath, isInitialized]);
+  
+  // Create folders if needed
+  async function createFolder(path) {
+    try {
+      // First check if it already exists
+      const exists = await folderExists(path);
+      if (exists) {
+        return true;
+      }
+      
+      await app.vault.createFolder(path);
+      return true;
+    } catch (error) {
+      setError(`Error creating folder ${path}: ${error.message}`);
+      return false;
+    }
+  }
+  
+  // Update the markdown file to save the folder path
+  async function updateMarkdownFile(folderPath) {
+    try {
+      // Get the current file
+      const activeFile = app.workspace.getActiveFile();
+      if (!activeFile) {
+        return false;
+      }
+      
+      // Read the current content
+      const content = await app.vault.read(activeFile);
+      
+      // Create regex to find the useState line with the folder path
+      const pathRegex = /const \[mainFolderPath, setMainFolderPath\] = useState\(['"](.*?)['"]\);/;
+      
+      // Replace the path with the new one
+      const updatedContent = content.replace(
+        pathRegex, 
+        `const [mainFolderPath, setMainFolderPath] = useState("${folderPath}");`
+      );
+      
+      // Save the updated content back to the file
+      await app.vault.modify(activeFile, updatedContent);
+      
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+  
+  // Handle setup completion
+  async function handleSetupComplete(folder) {
+    try {
+      // Update state with the new folder path first
+      setMainFolderPath(folder);
+      
+      // Update the markdown file with the new path
+      const updated = await updateMarkdownFile(folder);
+      if (updated) {
+        new Notice(`Priority Matrix path updated to: ${folder}`);
+      } else {
+        setError(`Failed to update Priority Matrix path in markdown file`);
+      }
+      
+      // Mark setup as complete
+      setIsSetupComplete(true);
+      setDataFolderReady(true); // Data is optional
+    } catch (err) {
+      setError(`Setup error: ${err.message}`);
+    }
+  }
+
+  // Render loading state
+  if (isLoading) {
     return (
-      <div style={styles.errorContainer}>
-        <div style={styles.errorIcon}>❓</div>
-        <div style={styles.errorTitle}>Unknown State</div>
-        <div style={styles.errorMessage}>
-          System is in an unknown state. Please reload the application.
-        </div>
-        <div style={styles.errorActions}>
-          <button 
-            style={styles.reloadButton}
-            onClick={() => window.location.reload()}
-          >
-            Reload Application
-          </button>
-        </div>
+      <div style={{
+        padding: "20px",
+        textAlign: "center",
+        backgroundColor: "var(--background-primary)",
+        borderRadius: "8px"
+      }}>
+        Loading Priority Matrix...
       </div>
     );
-  }, [systemState, criticalError, config]);
-
-  return renderContent;
+  }
+  
+  // If components are found and initialized, render Priority Matrix
+  if (componentsFound && isInitialized && window.PriorityMatrix) {
+    const PriorityMatrixComponent = window.PriorityMatrix;
+    return <PriorityMatrixComponent />;
+  }
+  
+  // If component wasn't found or not checked yet, show setup UI
+  if (!componentsFound) {
+    return <SetupComponent 
+      onComplete={handleSetupComplete} 
+      initialPath={mainFolderPath}
+      error={error}
+      componentsChecked={hasCheckedFolders}
+    />;
+  }
+  
+  // If Priority Matrix component should be loaded but isn't
+  return (
+    <div style={{ 
+      color: "var(--text-error)", 
+      padding: "20px",
+      backgroundColor: "var(--background-modifier-error)",
+      borderRadius: "8px",
+      textAlign: "center"
+    }}>
+      Error: Priority Matrix component not found in folder "{mainFolderPath}". The component was detected but failed to load.
+    </div>
+  );
 }
 
-// Styles for the application states
-const styles = {
-  loadingContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '300px',
-    padding: '40px',
-    backgroundColor: 'var(--background-primary)',
-    borderRadius: '8px',
-    border: '1px solid var(--background-modifier-border)'
-  },
-  loadingSpinner: {
-    fontSize: '48px',
-    animation: 'pulse 2s infinite',
-    marginBottom: '20px'
-  },
-  loadingTitle: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    color: 'var(--text-normal)',
-    marginBottom: '8px'
-  },
-  loadingMessage: {
-    fontSize: '16px',
-    color: 'var(--text-muted)',
-    textAlign: 'center'
-  },
-  errorContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '300px',
-    padding: '40px',
-    backgroundColor: 'var(--background-primary)',
-    borderRadius: '8px',
-    border: '2px solid var(--background-modifier-error)'
-  },
-  errorIcon: {
-    fontSize: '48px',
-    marginBottom: '20px'
-  },
-  errorTitle: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    color: 'var(--text-error)',
-    marginBottom: '12px'
-  },
-  errorMessage: {
-    fontSize: '16px',
-    color: 'var(--text-normal)',
-    textAlign: 'center',
-    marginBottom: '24px',
-    maxWidth: '500px',
-    lineHeight: '1.5'
-  },
-  errorActions: {
-    display: 'flex',
-    gap: '12px',
-    marginBottom: '20px'
-  },
-  reloadButton: {
-    padding: '10px 20px',
-    backgroundColor: 'var(--interactive-accent)',
-    color: 'var(--text-on-accent)',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500'
+// Setup component - separate component for better hook handling
+function SetupComponent({ onComplete, initialPath, error: parentError, componentsChecked }) {
+  const { useState } = dc;
+  const [folderPath, setFolderPath] = useState(initialPath || "");
+  const [error, setError] = useState(parentError || "");
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  async function handleSetup() {
+    if (!folderPath.trim()) {
+      setError("Please enter a folder path");
+      return;
+    }
+    
+    setIsProcessing(true);
+    setError("");
+    
+    try {
+      // Check if folder exists
+      const folderExists = app.vault.getAbstractFileByPath(folderPath);
+      if (!folderExists) {
+        setError(`Folder "${folderPath}" not found. Please enter a valid folder path containing the Priority Matrix components.`);
+        setIsProcessing(false);
+        return;
+      }
+      
+      // Now call onComplete with the validated folder path
+      onComplete(folderPath);
+    } catch (err) {
+      setError(`Setup error: ${err.message}`);
+      setIsProcessing(false);
+    }
   }
-};
+  
+  return (
+    <div style={{
+      backgroundColor: "var(--background-primary)",
+      padding: "20px",
+      borderRadius: "8px",
+      border: "1px solid var(--background-modifier-border)",
+      maxWidth: "500px",
+      margin: "0 auto"
+    }}>
+      <h3 style={{ margin: "0 0 16px 0", textAlign: "center" }}>Priority Matrix Setup</h3>
+      
+      {componentsChecked && (
+        <div style={{
+          backgroundColor: "var(--background-secondary)",
+          padding: "12px",
+          borderRadius: "6px",
+          marginBottom: "16px",
+          fontSize: "14px"
+        }}>
+          <p style={{ margin: "0 0 8px 0", fontWeight: "bold" }}>
+            Priority Matrix components not found!
+          </p>
+          <p style={{ margin: "0" }}>
+            Please enter the folder where Priority Matrix components are located.
+            This should be a folder containing "PriorityMatrix.jsx" file.
+          </p>
+        </div>
+      )}
+      
+      <p style={{ marginBottom: "16px" }}>
+        Where are your Priority Matrix components located?
+      </p>
+      
+      <div style={{ marginBottom: "16px" }}>
+        <dc.Textbox
+          value={folderPath}
+          onChange={(e) => setFolderPath(e.target.value)}
+          placeholder="Folder path (e.g., PriorityMatrix)"
+          style={{ width: "100%", padding: "8px" }}
+        />
+      </div>
+      
+      {(error || parentError) && (
+        <div style={{
+          backgroundColor: "rgba(255, 0, 0, 0.1)",
+          color: "var(--text-normal)",
+          border: "1px solid rgba(255, 0, 0, 0.3)",
+          padding: "10px",
+          borderRadius: "4px",
+          marginBottom: "16px"
+        }}>
+          {error || parentError}
+        </div>
+      )}
+      
+      <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
+        <dc.Button
+          onClick={handleSetup}
+          disabled={isProcessing || !folderPath.trim()}
+          style={{
+            backgroundColor: "var(--interactive-accent)",
+            color: "var(--text-on-accent)",
+            padding: "8px 16px",
+            border: "none",
+            borderRadius: "4px",
+            cursor: isProcessing ? "default" : "pointer",
+            opacity: isProcessing ? 0.7 : 1
+          }}
+        >
+          {isProcessing ? "Checking..." : "Find Priority Matrix"}
+        </dc.Button>
+      </div>
+    </div>
+  );
+}
 
-return PriorityMatrixMain;
+// Render the main app component
+return <PriorityMatrixMain />;
 ```

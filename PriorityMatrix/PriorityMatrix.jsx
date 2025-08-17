@@ -961,7 +961,8 @@ function PriorityMatrix() {
   async function loadConfig() {
     try {
       setAppState(prev => ({ ...prev, isLoading: true }));
-      const configFile = app.vault.getAbstractFileByPath("PriorityMatrix/priority_matrix_data.json");
+      const dataPath = window.PriorityMatrixDataPath || "PriorityMatrix/priority_matrix_data.json";
+      const configFile = app.vault.getAbstractFileByPath(dataPath);
       if (!configFile) return;
       
       const content = await app.vault.read(configFile);
@@ -985,7 +986,8 @@ function PriorityMatrix() {
 
   async function saveConfig() {
     try {
-      const configFile = app.vault.getAbstractFileByPath("PriorityMatrix/priority_matrix_data.json");
+      const dataPath = window.PriorityMatrixDataPath || "PriorityMatrix/priority_matrix_data.json";
+      const configFile = app.vault.getAbstractFileByPath(dataPath);
       let fileObj = {};
       if (configFile) {
         const current = await app.vault.read(configFile);
@@ -1009,7 +1011,8 @@ function PriorityMatrix() {
       if (configFile) {
         await app.vault.modify(configFile, finalJson);
       } else {
-        await app.vault.create("PriorityMatrix/priority_matrix_data.json", finalJson);
+        const dataPath = window.PriorityMatrixDataPath || "PriorityMatrix/priority_matrix_data.json";
+        await app.vault.create(dataPath, finalJson);
       }
     } catch (error) {
       logError("Failed to save config:", error);
